@@ -52,7 +52,7 @@ export default class Connection {
 
     this.open = true;
 
-    this.ws = new window.WebSocket(`ws://${url}`);
+    this.ws = new window.WebSocket(url);
 
     this.ws.binaryType = "arraybuffer";
 

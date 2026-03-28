@@ -64,8 +64,10 @@ export default class Game {
         this.setup(stage);
       return void 0;
       case 6:
-        /** Instant focus local player */
-        this.engine.camera.focus(this.engine.getEntityByProperty("Felix", "name"), true);
+        /** Instant focus local player (offline only — online mode: camera set by WS onMessage) */
+        if (OFFLINE_MODE) {
+          this.engine.camera.focus(this.engine.getEntityByProperty(cfg.LOCAL_PLAYER, "name"), true);
+        }
         this.setup(stage);
       return void 0;
       case 7:
@@ -76,7 +78,7 @@ export default class Game {
         if (!OFFLINE_MODE) {
           this.engine.connection = new Connection(
             this,
-            `${CONNECTION_URL}:${CONNECTION_PORT}`
+            CONNECTION_URL
           );
         }
         this.setup(stage);
