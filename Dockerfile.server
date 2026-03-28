@@ -1,0 +1,15 @@
+FROM node:8-alpine
+
+WORKDIR /app
+
+# Copy server package files and install dependencies
+COPY server/package.json ./
+RUN npm install
+
+# Copy server source
+COPY server/src/ ./src/
+COPY server/config.js ./config.js
+
+EXPOSE 3002
+
+CMD ["npm", "run", "start"]

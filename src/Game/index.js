@@ -3,6 +3,7 @@ import {
   LEFT, RIGHT, UP, DOWN,
   CONNECTION_URL, CONNECTION_PORT
 } from "../cfg";
+import * as cfg from "../cfg";
 
 import Engine from "../Engine";
 import Renderer from "../Engine/Renderer";
@@ -11,6 +12,10 @@ import Connection from "../Engine/Connection";
 
 import * as Events from "./input.js";
 import * as entities from "./entities";
+
+// Read player name from URL param ?player=username, fallback to "Trainer"
+const urlParams = (typeof window !== 'undefined') ? new URLSearchParams(window.location.search) : null;
+cfg.LOCAL_PLAYER = (urlParams && urlParams.get('player')) ? urlParams.get('player').slice(0, 20) : 'Trainer';
 
 /**
  * Game
@@ -189,7 +194,7 @@ export default class Game {
 
     if (OFFLINE_MODE) {
       this.engine.addEntity(new player({
-        name: "Felix", map: "Town", x: 144, y: 152, sprite: "assets/img/0.png", width: 16, height: 16, isLocalPlayer: true, collidable: true, normal: true,
+        name: cfg.LOCAL_PLAYER, map: "Town", x: 144, y: 152, sprite: "assets/img/0.png", width: 16, height: 16, isLocalPlayer: true, collidable: true, normal: true,
         onJump: (entity, map) => {
           if (entity.leader) {
             setTimeout(() => map.instance.notify(entity.leader, " :3 "), 250);

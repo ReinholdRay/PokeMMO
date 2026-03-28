@@ -1,0 +1,20 @@
+FROM node:8-alpine
+
+WORKDIR /app
+
+# Copy package files and install dependencies
+COPY package.json ./
+RUN npm install
+
+# Copy source files needed for webpack build
+COPY src/ ./src/
+COPY webpack.config.js ./
+COPY index.html ./
+COPY main.css ./
+COPY assets/ ./assets/
+COPY worlds/ ./worlds/
+
+# Build the bundle
+RUN npm run watch -- --watch=false || npx webpack --bail
+
+# The built bundle.js is now at /app/bundle.js alongside index.html

@@ -15,7 +15,7 @@ export let MAX_CONNECTIONS = 64;
  * @constant
  * @type {Number}
  */
-export const PORT = 449;
+export const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3002;
 
 /**
  * Server mode

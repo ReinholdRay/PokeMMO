@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  # One-shot client builder — produces bundle.js in a named volume
+  client-builder:
+    build:
+      context: .
+      dockerfile: Dockerfile.client
+    volumes:
+      - pokemmo-dist:/app
+    command: sh -c "echo 'Client build complete'"
+
+  # WebSocket game server — runs permanently
+  pokemmo-server:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    environment:
+      - PORT=3002
+    ports:
+      - "127.0.0.1:3002:3002"
+    restart: unless-stopped
+
+volumes:
+  pokemmo-dist:

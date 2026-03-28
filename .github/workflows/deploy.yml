@@ -1,0 +1,140 @@
+name: Build and Deploy PokeMMO
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # ── Build client bundle (webpack 1.x needs Node 8) ──────────────────
+      - name: Build client bundle via Docker
+        run: |
+          docker build -f Dockerfile.client -t pokemmo-client-builder .
+          # Extract bundle.js from the image into ./dist/
+          mkdir -p dist
+          docker create --name pokemmo-tmp pokemmo-client-builder
+          docker cp pokemmo-tmp:/app/bundle.js ./dist/bundle.js
+          docker cp pokemmo-tmp:/app/index.html ./dist/index.html
+          docker cp pokemmo-tmp:/app/main.css ./dist/main.css
+          docker cp pokemmo-tmp:/app/assets ./dist/assets
+          docker cp pokemmo-tmp:/app/worlds ./dist/worlds
+          docker rm pokemmo-tmp
+
+      # ── Deploy static client files ────────────────────────────────────
+      - name: Deploy client to server
+        uses: burnett01/rsync-deployments@7.0.1
+        with:
+          switches: -avzr --delete
+          path: dist/
+          remote_path: /var/www/pokemmo/
+          remote_host: 46.225.100.71
+          remote_user: ray
+          remote_key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      # ── Deploy server source ──────────────────────────────────────────
+      - name: Deploy WS server source to server
+        uses: burnett01/rsync-deployments@7.0.1
+        with:
+          switches: -avzr --delete --exclude='node_modules'
+          path: server/
+          remote_path: /var/www/pokemmo-server/
+          remote_host: 46.225.100.71
+          remote_user: ray
+          remote_key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      # ── Also sync docker-compose.yml and Dockerfile.server ───────────
+      - name: Sync docker files
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: 46.225.100.71
+          username: ray
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            mkdir -p /var/www/pokemmo-server
+
+      - name: rsync Dockerfiles
+        uses: burnett01/rsync-deployments@7.0.1
+        with:
+          switches: -avz
+          path: Dockerfile.server
+          remote_path: /var/www/pokemmo-docker/Dockerfile.server
+          remote_host: 46.225.100.71
+          remote_user: ray
+          remote_key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      # ── Build Docker image + restart WS server on Hetzner VPS ────────
+      - name: Restart PokeMMO WS server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: 46.225.100.71
+          username: ray
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+            PM2=$(which pm2 || echo /usr/local/bin/pm2)
+
+            # Ensure static files dir is accessible by nginx
+            sudo mkdir -p /var/www/pokemmo
+            sudo chown -R ray:ray /var/www/pokemmo
+
+            # Build Docker image for WS server
+            cd /var/www/pokemmo-server
+            docker build -f /var/www/pokemmo-docker/Dockerfile.server -t pokemmo-server .
+
+            # Start or restart the WS server container
+            docker rm -f pokemmo-ws 2>/dev/null || true
+            docker run -d \
+              --name pokemmo-ws \
+              --restart unless-stopped \
+              -p 127.0.0.1:3002:3002 \
+              pokemmo-server
+
+            # Configure Nginx for /pokemmo/ and /pokemmo-ws if not done yet
+            NGINX_CONF="/etc/nginx/sites-enabled/hello-web"
+
+            if ! sudo grep -q "location /pokemmo/" "$NGINX_CONF"; then
+              sudo tee /etc/nginx/snippets/pokemmo.conf > /dev/null << 'NGINXEOF'
+            # ── Internal auth check endpoint ──────────────────────────────────
+            location = /auth-check {
+                internal;
+                proxy_pass              http://127.0.0.1:3001/api/auth/me;
+                proxy_pass_request_body off;
+                proxy_set_header        Content-Length "";
+                proxy_set_header        X-Original-URI $request_uri;
+                proxy_set_header        Cookie $http_cookie;
+            }
+
+            # ── PokeMMO static client files (auth-gated) ──────────────────────
+            location /pokemmo/ {
+                auth_request /auth-check;
+                error_page 401 = @pokemmo_login_redirect;
+                alias /var/www/pokemmo/;
+                try_files $uri $uri/ /pokemmo/index.html;
+            }
+
+            location @pokemmo_login_redirect {
+                return 302 /login?redirect=/projects/pokemon;
+            }
+
+            # ── PokeMMO WebSocket proxy (auth handled by client) ──────────────
+            location /pokemmo-ws {
+                proxy_pass          http://127.0.0.1:3002;
+                proxy_http_version  1.1;
+                proxy_set_header    Upgrade $http_upgrade;
+                proxy_set_header    Connection "Upgrade";
+                proxy_set_header    Host $host;
+                proxy_read_timeout  3600s;
+            }
+            NGINXEOF
+              # Include the snippet in the main server block
+              sudo sed -i '/^    listen 443 ssl;/i \    include /etc/nginx/snippets/pokemmo.conf;\n' "$NGINX_CONF"
+            fi
+
+            sudo nginx -t && sudo systemctl reload nginx

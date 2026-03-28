@@ -37,15 +37,21 @@ export let LOCAL_PLAYER = null;
  * Connection url
  * @constant
  * @type {String}
+ * Dynamically resolved so the WS connection works behind Nginx reverse-proxy.
  */
-export const CONNECTION_URL = getLocalHost();
+function getWsUrl() {
+  if (typeof window === 'undefined') return 'ws://127.0.0.1';
+  const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
+  return proto + '://' + window.location.host + '/pokemmo-ws';
+}
+export const CONNECTION_URL = getWsUrl();
 
 /**
- * Connection port
+ * Connection port — empty: path-based routing via Nginx,  no explicit port.
  * @constant
  * @type {String}
  */
-export const CONNECTION_PORT = 449;
+export const CONNECTION_PORT = '';
 
 /**
  * @constant
@@ -103,7 +109,7 @@ export let DEBUG_MODE = false;
  * @constant
  * @type {Boolean}
  */
-export let OFFLINE_MODE = true;
+export let OFFLINE_MODE = false;
 
 /**
  * Record mode
