@@ -4,7 +4,7 @@
   "description": "Pokémon Engine Server",
   "main": "src/index.js",
   "dependencies": {
-    "fast-json-patch": "Starcounter-Jack/JSON-Patch",
+    "fast-json-patch": "https://github.com/Starcounter-Jack/JSON-Patch/archive/master.tar.gz",
     "msgpack-lite": "^0.1.13",
     "shortid": "^2.2.4",
     "es6-module-loader": "^0.17.11",
